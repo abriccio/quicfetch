@@ -11,7 +11,8 @@ extern "C" {
 typedef struct Updater Updater;
 
 typedef void (*check_version_cb)(Updater *u, bool needs_update);
-typedef void (*download_cb)(Updater *u, char *bytes, size_t size);
+typedef void (*download_progress_cb)(Updater *u, size_t cur, size_t size);
+typedef void (*download_finished_cb)(Updater *u, char *data, size_t size);
 
 // cb -- Callback from fetch thread with version check result. Don't call any
 // library functions from it since it wants to yield right after calling.
@@ -22,7 +23,8 @@ void updater_fetch(Updater *);
 const char *updater_get_bin_url(Updater *);
 
 typedef struct DownloadOptions {
-    download_cb cb;
+    download_progress_cb progress;
+    download_finished_cb finished;
     int chunk_size;
     const char *sha256;
 } DownloadOptions;

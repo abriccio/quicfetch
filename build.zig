@@ -8,6 +8,7 @@ pub fn build(b: *std.Build) void {
         .name = "main",
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
     exe.addCSourceFile(.{
         .file = b.path("main.cpp"),
@@ -18,6 +19,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("web.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
 
     exe.linkLibrary(lib);

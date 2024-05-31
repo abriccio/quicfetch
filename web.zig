@@ -17,7 +17,8 @@ const Header = std.http.Client.Request.Headers;
 const json = std.json;
 
 const CheckVersionCb = ?*const fn (*anyopaque, bool) callconv(.C) void;
-const DownloadCb = ?*const fn (*anyopaque, [*]u8, usize) callconv(.C) void;
+const DownloadProgressCb = ?*const fn (*anyopaque, read: usize, total: usize) callconv(.C) void;
+const DownloadFinishedCb = ?*const fn (*anyopaque, data: [*]u8, size: usize) callconv(.C) void;
 
 const Updater = struct {
     url: []const u8,
@@ -44,11 +45,13 @@ const App = struct {
 };
 
 const DownloadOptions = extern struct {
-    cb: DownloadCb,
+    progress: DownloadProgressCb,
+    finished: DownloadFinishedCb,
     chunk_size: c_int,
     sha256: [*:0]const u8,
 };
 
+// TODO: Take the callback when you fetch is called
 export fn updater_init(
     url: [*:0]const u8,
     name: [*:0]const u8,
@@ -153,7 +156,10 @@ fn fetch_async(u: *Updater) !void {
 
     const parsed = try parseToValue(u.arena, buf.items);
     defer parsed.deinit();
-    const json_value = parsed.value;
+    const json_value = parsed.value.object.get("plugins") orelse {
+        std.log.err("plugins field not found\n", .{});
+        return error.PluginsNotFound;
+    };
     const plugin_json = json_value.object.get(u.name) orelse {
         std.log.err("Name {s} not found\n", .{u.name});
         return error.NameNotFound;
@@ -197,13 +203,27 @@ fn download_async(u: *Updater, url: []const u8, options: DownloadOptions) !void 
 
     try req.send();
     try req.wait();
-    const buf = try req.reader().readAllAlloc(u.arena, 1 << 32);
+    const res = req.response;
+    if (res.status != .ok) {
+        const name = res.status.phrase() orelse @tagName(res.status);
+        std.log.err("Connection failed: {d}: {s}", .{ @intFromEnum(res.status), name });
+        return error.ConnectionFailed;
+    }
+    const size = res.content_length orelse 0;
+
+    const buf = try u.arena.alloc(u8, size);
     defer u.arena.free(buf);
 
-    std.debug.print("Response: \n{s}\n", .{buf});
+    var bytes_read: usize = 0;
+    while (bytes_read < size) {
+        bytes_read += try req.reader().readAtLeast(buf, @intCast(options.chunk_size));
+        if (options.progress) |func|
+            func(u, bytes_read, size);
+    }
 
-    if (options.cb) |func|
-        func(u, buf.ptr, buf.len)
-    else
-        return error.NoCallback;
+    if (bytes_read != size)
+        std.log.err("Couldn't read full buffer\n", .{});
+
+    if (options.finished) |func|
+        func(u, buf.ptr, bytes_read);
 }

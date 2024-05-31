@@ -6,6 +6,7 @@
 
 bool evil = true;
 bool g_need_update = false;
+bool can_quit = false;
 
 void on_check(Updater *u, bool needs_update) {
     if (needs_update) {
@@ -18,15 +19,20 @@ void on_check(Updater *u, bool needs_update) {
     evil = false;
 }
 
-void on_download(Updater *u, char *bytes, size_t size) {
-    printf("Download size: %zu\n", size);
+void download_progress(Updater *u, size_t cur, size_t size) {
+    printf("Downloaded : %zu / %zu\n", cur, size);
+}
+
+void download_finished(Updater *u, char *data, size_t size) {
+    printf("Download finished | %zuB\n", size);
+    can_quit = true;
 }
 
 int main() {
     Updater *updater = updater_init(
-        "http://localhost:1313/versions/draft/index.json",
-        "PiMax",
-        "1.1.0",
+        "https://arborealaudio.com/versions/index.json",
+        "OmniAmp",
+        "1.0.0",
         on_check
     );
 
@@ -43,12 +49,14 @@ int main() {
         const char *bin_url = updater_get_bin_url(updater);
         printf("Downloading from %s\n", bin_url);
         updater_download_bin(updater, bin_url, (DownloadOptions){
-                                 .cb = on_download,
-                                 .chunk_size = 64 * 1024,
+                                 .progress = download_progress,
+                                 .finished = download_finished,
+                                 .chunk_size = 32 * 1024,
                                  .sha256 = "",
                              });
     }
 
+    while (!can_quit) {}
     updater_deinit(updater);
     return 0;
 }
