@@ -35,7 +35,7 @@ void download_finished(Updater *u, bool ok, size_t size) {
 int main() {
     Updater *updater = updater_init(
         "https://arborealaudio.com/versions/draft/index.json",
-        "PiMax",
+        "OmniAmp",
         "1.0.0"
     );
 
