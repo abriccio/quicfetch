@@ -1,4 +1,4 @@
-#include "api.h"
+#include "quicfetch.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,7 +8,7 @@
 #else
 #include <time.h>
 #include <unistd.h>
-#define SLEEP(ms) struct timespec ts = {(ms)*1000}; nanosleep(&ts, NULL)
+#define SLEEP(ms) struct timespec ts = {.tv_nsec=(ms)*1000}; nanosleep(&ts, NULL)
 #endif
 
 
@@ -53,7 +53,6 @@ int main() {
     }
 
     if (g_need_update) {
-        char buf[64] = {0};
         updater_download_bin(updater, (DownloadOptions){
                                  .progress = download_progress,
                                  .finished = download_finished,

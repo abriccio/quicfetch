@@ -130,7 +130,6 @@ fn fetchWrapper(u: *Updater, cb: CheckVersionCb) void {
     fetchAsync(u, cb) catch |e| {
         std.log.err("Fetch: {!}\n", .{e});
     };
-    // std.Thread.yield() catch |e| std.log.err("{!}\n", .{e});
 }
 
 fn fetchAsync(u: *Updater, cb: CheckVersionCb) !void {
@@ -184,7 +183,6 @@ fn downloadWrapper(
     downloadAsync(u, options) catch |e| {
         std.log.err("Download: {!}\n", .{e});
     };
-    // std.Thread.yield() catch |e| std.log.err("{!}\n", .{e});
 }
 
 fn downloadAsync(
@@ -201,7 +199,8 @@ fn downloadAsync(
     const filename = std.fs.path.basename(url);
     const checksum = try u.arena.dupe(u8, bin.checksum);
 
-    const dest_dir = span(options.dest_dir) orelse try std.fs.cwd().realpathAlloc(u.arena, ".");
+    const dest_dir = span(options.dest_dir) orelse
+        try std.fs.cwd().realpathAlloc(u.arena, ".");
 
     var client = Client{ .allocator = u.arena };
     defer client.deinit();
