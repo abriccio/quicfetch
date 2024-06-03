@@ -2,8 +2,15 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef WIN32
+#include <windows.h>
+#define SLEEP(ms) Sleep(ms)
+#else
 #include <time.h>
 #include <unistd.h>
+#define SLEEP(ms) struct timespec ts = {(ms)*1000}; nanosleep(&ts, NULL)
+#endif
+
 
 bool evil = true;
 bool g_need_update = false;
@@ -42,19 +49,15 @@ int main() {
     updater_fetch(updater, on_check);
 
     while (evil) {
-        struct timespec sleep_time = {
-            .tv_nsec = 500 * 1000,
-        };
-        nanosleep(&sleep_time, NULL);
+        SLEEP(500);
     }
 
     if (g_need_update) {
         char buf[64] = {0};
-        const char *cwd = getcwd(buf, sizeof(buf));
         updater_download_bin(updater, (DownloadOptions){
                                  .progress = download_progress,
                                  .finished = download_finished,
-                                 .dest_dir = cwd,
+                                 .dest_dir = NULL,
                                  .chunk_size = 32 * 1024,
                              });
     }

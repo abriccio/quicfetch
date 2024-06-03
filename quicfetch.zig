@@ -67,7 +67,7 @@ const BinInfo = struct {
 const DownloadOptions = extern struct {
     progress: DownloadProgressCb,
     finished: DownloadFinishedCb,
-    dest_dir: [*:0]const u8,
+    dest_dir: ?[*:0]const u8,
     chunk_size: c_int,
 };
 
@@ -200,6 +200,9 @@ fn downloadAsync(
     const url = try u.arena.dupe(u8, bin.url);
     const filename = std.fs.path.basename(url);
     const checksum = try u.arena.dupe(u8, bin.checksum);
+
+    const dest_dir = span(options.dest_dir) orelse try std.fs.cwd().realpathAlloc(u.arena, ".");
+
     var client = Client{ .allocator = u.arena };
     defer client.deinit();
 
@@ -258,7 +261,7 @@ fn downloadAsync(
     }
     std.debug.print("Hash OK\n", .{});
 
-    var dest = std.fs.openDirAbsolute(span(options.dest_dir), .{}) catch |e| {
+    var dest = std.fs.openDirAbsolute(dest_dir, .{}) catch |e| {
         std.log.err("{!}\n", .{e});
         if (options.finished) |func|
             func(u, false, bytes_read);
