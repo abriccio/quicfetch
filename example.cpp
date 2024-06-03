@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 
 bool evil = true;
 bool g_need_update = false;
@@ -23,20 +24,22 @@ void download_progress(Updater *u, size_t cur, size_t size) {
     printf("Downloaded : %zu / %zu\n", cur, size);
 }
 
-void download_finished(Updater *u, char *data, size_t size) {
-    printf("Download finished | %zuB\n", size);
+void download_finished(Updater *u, bool ok, size_t size) {
+    if (ok)
+        printf("Download finished | %zuB\n", size);
+    else
+        printf("Download failed\n");
     can_quit = true;
 }
 
 int main() {
     Updater *updater = updater_init(
-        "https://arborealaudio.com/versions/index.json",
-        "OmniAmp",
-        "1.0.0",
-        on_check
+        "https://arborealaudio.com/versions/draft/index.json",
+        "PiMax",
+        "1.0.0"
     );
 
-    updater_fetch(updater);
+    updater_fetch(updater, on_check);
 
     while (evil) {
         struct timespec sleep_time = {
@@ -46,13 +49,13 @@ int main() {
     }
 
     if (g_need_update) {
-        const char *bin_url = updater_get_bin_url(updater);
-        printf("Downloading from %s\n", bin_url);
-        updater_download_bin(updater, bin_url, (DownloadOptions){
+        char buf[64] = {0};
+        const char *cwd = getcwd(buf, sizeof(buf));
+        updater_download_bin(updater, (DownloadOptions){
                                  .progress = download_progress,
                                  .finished = download_finished,
+                                 .dest_dir = cwd,
                                  .chunk_size = 32 * 1024,
-                                 .sha256 = "",
                              });
     }
 

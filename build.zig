@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
     });
     exe.addCSourceFile(.{
-        .file = b.path("main.cpp"),
+        .file = b.path("example.cpp"),
     });
 
     const lib = b.addStaticLibrary(.{
