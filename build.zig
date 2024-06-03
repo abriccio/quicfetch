@@ -15,8 +15,8 @@ pub fn build(b: *std.Build) void {
     });
 
     const lib = b.addStaticLibrary(.{
-        .name = "web",
-        .root_source_file = b.path("web.zig"),
+        .name = "quicfetch",
+        .root_source_file = b.path("quicfetch.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
