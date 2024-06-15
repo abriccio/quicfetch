@@ -2,9 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const debug_build = builtin.mode == .Debug;
 
-fn fatal_error(err: anyerror) noreturn {
+fn logError(err: anyerror) void {
     std.log.err("{!}\n", .{err});
-    std.process.exit(1);
 }
 
 const Arena = std.heap.ArenaAllocator;
@@ -33,10 +32,37 @@ const Updater = struct {
 
     app: App = undefined,
 
+    msg_buf: [256]u8 = .{0} ** 256,
+
     /// Undefined until updater_fetch() is called
     fetch_thread: std.Thread = undefined,
     /// Undefined until updater_download_bin() is called
     dl_thread: std.Thread = undefined,
+
+    fn writeMessage(u: *Updater, comptime fmt: []const u8, args: anytype) void {
+        _ = std.fmt.bufPrint(&u.msg_buf, fmt, args) catch |e| {
+            std.log.err("{!}\n", .{e});
+        };
+    }
+
+    pub fn getBinForOS(self: *Updater) !BinInfo {
+        const app = self.app;
+        switch (builtin.os.tag) {
+            .macos => return app.bin.macos orelse {
+                self.writeMessage("MacOS bin not found", .{});
+                return error.BinNotFound;
+            },
+            .linux => return self.bin.linux orelse {
+                self.writeMessage("Linux bin not found", .{});
+                return error.BinNotFound;
+            },
+            .windows => return self.bin.windows orelse {
+                self.writeMessage("Windows bin not found", .{});
+                return error.BinNotFound;
+            },
+            else => @panic("Unsupported OS"),
+        }
+    }
 };
 
 const App = struct {
@@ -47,15 +73,6 @@ const App = struct {
         windows: ?BinInfo = null,
         linux: ?BinInfo = null,
     },
-
-    pub fn getBinForOS(self: App) !BinInfo {
-        switch (builtin.os.tag) {
-            .macos => return self.bin.macos orelse error.NoBin,
-            .linux => return self.bin.linux orelse error.NoBin,
-            .windows => return self.bin.windows orelse error.NoBin,
-            else => @panic("Unsupported OS"),
-        }
-    }
 };
 
 const BinInfo = struct {
@@ -76,15 +93,21 @@ export fn updater_init(
     name: [*:0]const u8,
     current_version: [*:0]const u8,
 ) ?*Updater {
-    const updater = std.heap.c_allocator.create(Updater) catch |e|
-        fatal_error(e);
+    const updater = std.heap.c_allocator.create(Updater) catch |e| {
+        logError(e);
+        return null;
+    };
     updater.* = .{
         .url = span(url),
-        .arena_impl = std.heap.c_allocator.create(Arena) catch |e|
-            fatal_error(e),
+        .arena_impl = std.heap.c_allocator.create(Arena) catch |e| {
+            logError(e);
+            return null;
+        },
         .name = span(name),
-        .version = std.SemanticVersion.parse(span(current_version)) catch |e|
-            fatal_error(e),
+        .version = std.SemanticVersion.parse(span(current_version)) catch |e| {
+            logError(e);
+            return null;
+        },
     };
 
     updater.arena_impl.* = Arena.init(std.heap.raw_c_allocator);
@@ -98,7 +121,7 @@ export fn updater_deinit(u: ?*Updater) void {
         updater.fetch_thread.join();
         updater.dl_thread.join();
         updater.arena_impl.deinit();
-    } else fatal_error(error.UpdaterNull);
+    } else logError(error.UpdaterNull);
 }
 
 export fn updater_fetch(u: ?*Updater, cb: CheckVersionCb) void {
@@ -107,10 +130,12 @@ export fn updater_fetch(u: ?*Updater, cb: CheckVersionCb) void {
             .{},
             fetchWrapper,
             .{ updater, cb },
-        ) catch |e|
-            fatal_error(e);
+        ) catch |e| {
+            updater.writeMessage("Error: {s}\n", .{@errorName(e)});
+            return;
+        };
         updater.fetch_thread = fetch_thread;
-    } else fatal_error(error.UpdaterNull);
+    } else logError(error.UpdaterNull);
 }
 
 /// Uses OS-appropriate URL
@@ -120,15 +145,28 @@ export fn updater_download_bin(u: ?*Updater, options: DownloadOptions) void {
             .{},
             downloadWrapper,
             .{ updater, options },
-        ) catch |e|
-            fatal_error(e);
+        ) catch |e| {
+            updater.writeMessage("Error: {s}\n", .{@errorName(e)});
+            return;
+        };
         updater.dl_thread = dl_thread;
-    } else fatal_error(error.UpdaterIsNull);
+    } else logError(error.UpdaterNull);
+}
+
+export fn updater_get_message(u: ?*Updater) [*]const u8 {
+    if (u) |updater| {
+        return &updater.msg_buf;
+    } else {
+        logError(error.UpdaterNull);
+        return "Error: Updater is null";
+    }
 }
 
 fn fetchWrapper(u: *Updater, cb: CheckVersionCb) void {
     fetchAsync(u, cb) catch |e| {
-        std.log.err("Fetch: {!}\n", .{e});
+        u.writeMessage("Error: {s}\n", .{@errorName(e)});
+        if (cb) |func|
+            func(u, false);
     };
 }
 
@@ -139,12 +177,10 @@ fn fetchAsync(u: *Updater, cb: CheckVersionCb) !void {
     var buf = std.ArrayList(u8).init(u.arena);
     defer buf.deinit();
 
-    const res = try client.fetch(
-        .{
-            .location = .{ .url = u.url },
-            .response_storage = .{ .dynamic = &buf },
-        },
-    );
+    const res = try client.fetch(.{
+        .location = .{ .url = u.url },
+        .response_storage = .{ .dynamic = &buf },
+    });
 
     if (res.status != .ok) {
         const name = res.status.phrase() orelse @tagName(res.status);
@@ -181,7 +217,7 @@ fn downloadWrapper(
     options: DownloadOptions,
 ) void {
     downloadAsync(u, options) catch |e| {
-        std.log.err("Download: {!}\n", .{e});
+        u.writeMessage("Error: {s}\n", .{@errorName(e)});
     };
 }
 
@@ -189,9 +225,7 @@ fn downloadAsync(
     u: *Updater,
     options: DownloadOptions,
 ) !void {
-    const bin = u.app.getBinForOS() catch |e| {
-        fatal_error(e);
-    };
+    const bin = try u.getBinForOS();
     // For my own edification, I'd like to know why I have to dupe this and the
     // checksum. We don't delete `url` and `checksum` during the lifetime of
     // this thread, right? So why does its memory get invalidated during this fn?...
@@ -267,7 +301,7 @@ fn downloadAsync(
         return e;
     };
     defer dest.close();
-    dest.writeFile2(.{ .sub_path = filename, .data = buf[0..bytes_read] }) catch |e| {
+    dest.writeFile(.{ .sub_path = filename, .data = buf[0..bytes_read] }) catch |e| {
         std.log.err("{!}\n", .{e});
         if (options.finished) |func|
             func(u, false, bytes_read);

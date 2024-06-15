@@ -19,6 +19,7 @@ bool can_quit = false;
 void on_check(Updater *u, bool needs_update) {
     if (needs_update) {
         printf("Needs update\n");
+        printf("%s\n", updater_get_message(u));
         g_need_update = true;
     }
     else
@@ -29,13 +30,17 @@ void on_check(Updater *u, bool needs_update) {
 
 void download_progress(Updater *u, size_t cur, size_t size) {
     printf("Downloaded : %zu / %zu\n", cur, size);
+    printf("%s\n", updater_get_message(u));
 }
 
 void download_finished(Updater *u, bool ok, size_t size) {
-    if (ok)
+    if (ok) {
         printf("Download finished | %zuB\n", size);
-    else
+        printf("%s\n", updater_get_message(u));
+    } else {
         printf("Download failed\n");
+        printf("%s\n", updater_get_message(u));
+    }
     can_quit = true;
 }
 
