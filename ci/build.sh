@@ -16,11 +16,11 @@ echo "Getting Zig ${TRIPLE}"
 
 [ $RUNNER_OS != 'Windows' ] && curl "https://ziglang.org/builds/zig-${TRIPLE}.tar.xz" | tar xJ
 if [[ $RUNNER_OS == 'Windows' ]]; then
-  choco install zig --version $ZIG_VERSION
-  ZIG="zig.exe"
-else
-  ZIG="zig-${TRIPLE}/zig"
+  curl "https://ziglang.org/builds/zig-${TRIPLE}.zip" -o zig-${TRIPLE}.zip
+  7z x zig-${TRIPLE}.zip
 fi
+
+ZIG="zig-${TRIPLE}/zig.exe"
 
 echo "Zig path: ${ZIG}"
 
