@@ -6,7 +6,7 @@ set -e
 [ $RUNNER_OS == 'Windows' ] && OS="windows"
 [ $RUNNER_OS == 'Linux' ] && OS="linux"
 
-ZIG_VERSION="0.12.0"
+ZIG_VERSION="0.13.0"
 
 [ $(uname -m) == 'arm64' ] && ARCH='aarch64' || ARCH=$(uname -m)
 
