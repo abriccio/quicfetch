@@ -52,11 +52,11 @@ const Updater = struct {
                 self.writeMessage("MacOS bin not found", .{});
                 return error.BinNotFound;
             },
-            .linux => return self.bin.linux orelse {
+            .linux => return app.bin.linux orelse {
                 self.writeMessage("Linux bin not found", .{});
                 return error.BinNotFound;
             },
-            .windows => return self.bin.windows orelse {
+            .windows => return app.bin.windows orelse {
                 self.writeMessage("Windows bin not found", .{});
                 return error.BinNotFound;
             },
