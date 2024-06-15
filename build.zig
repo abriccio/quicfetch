@@ -21,6 +21,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .link_libc = true,
     });
+    if (target.result.os.tag == .windows) {
+        lib.linkSystemLibrary2("Crypt32", .{});
+        lib.linkSystemLibrary2("Ws2_32", .{});
+    }
 
     exe.linkLibrary(lib);
 
