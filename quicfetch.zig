@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const debug_build = builtin.mode == .Debug;
 
 fn logError(err: anyerror) void {
-    std.log.err("{!}\n", .{err});
+    std.log.err("{s}\n", .{@errorName(err)});
 }
 
 const Arena = std.heap.ArenaAllocator;
@@ -218,6 +218,9 @@ fn downloadWrapper(
 ) void {
     downloadAsync(u, options) catch |e| {
         u.writeMessage("Error: {s}\n", .{@errorName(e)});
+        if (options.finished) |func| {
+            func(u, false, 0);
+        }
     };
 }
 

@@ -11,7 +11,6 @@
 #define SLEEP(ms) struct timespec ts = {.tv_nsec=(ms)*1000}; nanosleep(&ts, NULL)
 #endif
 
-
 bool evil = true;
 bool g_need_update = false;
 
@@ -33,6 +32,7 @@ void download_finished(Updater *u, bool ok, size_t size) {
         printf("Download finished | %zuB\n", size);
     } else {
         printf("Download failed\n");
+        printf("%s\n", updater_get_message(u));
     }
     evil = false;
 }
@@ -40,7 +40,7 @@ void download_finished(Updater *u, bool ok, size_t size) {
 int main() {
     Updater *updater = updater_init(
         "https://arborealaudio.com/versions/draft/index.json",
-        "PiMax",
+        "OmniAmp",
         "1.0.0"
     );
 
@@ -55,6 +55,7 @@ int main() {
                                      .dest_dir = NULL,
                                      .chunk_size = 32 * 1024,
                                  });
+            g_need_update = false;
         }
     }
 
