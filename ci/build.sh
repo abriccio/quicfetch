@@ -18,9 +18,10 @@ echo "Getting Zig ${TRIPLE}"
 if [[ $RUNNER_OS == 'Windows' ]]; then
   curl "https://ziglang.org/builds/zig-${TRIPLE}.zip" -o zig-${TRIPLE}.zip
   7z x zig-${TRIPLE}.zip
+  ZIG="zig-${TRIPLE}/zig.exe"
+else
+  ZIG="zig-${TRIPLE}/zig"
 fi
-
-ZIG="zig-${TRIPLE}/zig.exe"
 
 echo "Zig path: ${ZIG}"
 
