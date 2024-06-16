@@ -25,4 +25,4 @@ fi
 
 echo "Zig path: ${ZIG}"
 
-$ZIG build run
+$ZIG build run -Dbuild-example
