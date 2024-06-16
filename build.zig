@@ -4,15 +4,13 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe = b.addExecutable(.{
-        .name = "main",
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
-    exe.addCSourceFile(.{
-        .file = b.path("example.cpp"),
-    });
+    const build_options = b.addOptions();
+    const build_example = b.option(
+        bool,
+        "build-example",
+        "Build example runner binary",
+    ) orelse false;
+    build_options.addOption(bool, "build-example", build_example);
 
     const lib = b.addStaticLibrary(.{
         .name = "quicfetch",
@@ -26,12 +24,24 @@ pub fn build(b: *std.Build) void {
         lib.linkSystemLibrary2("Ws2_32", .{});
     }
 
-    exe.linkLibrary(lib);
+    b.installArtifact(lib);
 
-    b.installArtifact(exe);
+    if (build_example) {
+        const exe = b.addExecutable(.{
+            .name = "main",
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
+        exe.addCSourceFile(.{
+            .file = b.path("example.cpp"),
+        });
+        exe.linkLibrary(lib);
+        b.installArtifact(exe);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    const run = b.step("run", "Run app");
-    run.dependOn(&run_cmd.step);
+        const run_cmd = b.addRunArtifact(exe);
+        run_cmd.step.dependOn(b.getInstallStep());
+        const run = b.step("run", "Run app");
+        run.dependOn(&run_cmd.step);
+    }
 }
