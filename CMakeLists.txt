@@ -23,4 +23,5 @@ add_custom_target(quicfetch_build DEPENDS ${LIB_ARTIFACT})
 add_library(quicfetch STATIC IMPORTED GLOBAL)
 add_dependencies(quicfetch quicfetch_build)
 set_target_properties(quicfetch PROPERTIES
-    IMPORTED_LOCATION ${LIB_ARTIFACT})
+    IMPORTED_LOCATION ${LIB_ARTIFACT}
+    POSITION_INDEPENDENT_CODE TRUE)
