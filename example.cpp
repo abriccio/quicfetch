@@ -1,4 +1,4 @@
-#include <quicfetch.h>
+#include "include/quicfetch.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,17 +19,18 @@ void on_check(Updater *u, bool needs_update) {
         printf("Needs update\n");
         g_need_update = true;
     }
-    else
-        printf("Does not need update\n");
+    const char *msg = updater_get_message(u);
+    printf("%s\n", msg);
 }
 
 void download_progress(Updater *u, size_t cur, size_t size) {
-    printf("Downloaded : %zu / %zu\n", cur, size);
+    printf("Downloaded : %zukB / %zukB | %.2f%%\n", cur / 1024, size / 1024,
+         (float)cur / (float)size * 100.f);
 }
 
 void download_finished(Updater *u, bool ok, size_t size) {
     if (ok) {
-        printf("Download finished | %zuB\n", size);
+        printf("Download finished | %zukB\n", size/1024);
     } else {
         printf("Download failed\n");
         printf("%s\n", updater_get_message(u));

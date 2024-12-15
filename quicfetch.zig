@@ -1,4 +1,5 @@
 const std = @import("std");
+const mem = std.mem;
 const builtin = @import("builtin");
 const SourceLocation = std.builtin.SourceLocation;
 const debug_build = builtin.mode == .Debug;
@@ -46,7 +47,8 @@ const Updater = struct {
     dl_thread: std.Thread = undefined,
 
     fn writeMessage(u: *Updater, comptime fmt: []const u8, args: anytype) void {
-        _ = std.fmt.bufPrint(&u.msg_buf, fmt, args) catch |e| {
+        @memset(&u.msg_buf, 0);
+        _ = std.fmt.bufPrintZ(&u.msg_buf, fmt, args) catch |e| {
             logError(e, @src());
         };
     }
@@ -71,6 +73,7 @@ const Updater = struct {
     }
 };
 
+// struct corresponding to a plugin entry in the JSON response
 const App = struct {
     version: []const u8,
     changes: []const u8,
@@ -161,7 +164,7 @@ export fn updater_download_bin(u: ?*Updater, options: DownloadOptions) void {
 
 export fn updater_get_message(u: ?*Updater) [*]const u8 {
     if (u) |updater| {
-        return &updater.msg_buf;
+        return (&updater.msg_buf).ptr;
     } else {
         logError(error.UpdaterNull, @src());
         return "Error: Updater is null";
@@ -170,7 +173,7 @@ export fn updater_get_message(u: ?*Updater) [*]const u8 {
 
 fn fetchAsyncCatchError(u: *Updater, cb: CheckVersionCb) void {
     fetchAsync(u, cb) catch |e| {
-        u.writeMessage("Error: {s}\n", .{@errorName(e)});
+        u.writeMessage("Error fetching update: {s}\n", .{@errorName(e)});
         if (cb) |func|
             func(u, false);
     };
@@ -209,6 +212,19 @@ fn fetchAsync(u: *Updater, cb: CheckVersionCb) !void {
     const new_version = try std.SemanticVersion.parse(plugin.version);
     const needs_update = std.SemanticVersion.order(new_version, u.version).compare(.gt);
 
+    if (needs_update) {
+        u.writeMessage(
+            \\New version: {s}
+            \\Changes:
+            \\{s}
+        , .{
+            plugin.version,
+            plugin.changes,
+        });
+    } else {
+        u.writeMessage("Plugin is up-to-date", .{});
+    }
+
     if (cb) |func| {
         func(u, needs_update);
     } else return error.NoCallback;
@@ -223,7 +239,7 @@ fn downloadAsyncCatchError(
     options: DownloadOptions,
 ) void {
     downloadAsync(u, options) catch |e| {
-        u.writeMessage("Error: {s}\n", .{@errorName(e)});
+        u.writeMessage("Error downloading update: {s}\n", .{@errorName(e)});
         if (options.finished) |func| {
             func(u, false, 0);
         }

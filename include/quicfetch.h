@@ -22,6 +22,7 @@ Updater *updater_init(const char *url, const char *name,
 void updater_deinit(Updater *);
 // cb -- Callback from fetch thread with version check result. Don't call any
 // library functions from it since it wants to yield right after calling.
+// Call `updater_get_message` to read about the update.
 void updater_fetch(Updater *, check_version_cb cb);
 const char *updater_get_message(Updater *);
 
