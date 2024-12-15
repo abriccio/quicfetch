@@ -1,4 +1,4 @@
-#include "quicfetch.h"
+#include <quicfetch.h>
 
 #include <stdio.h>
 #include <stdlib.h>

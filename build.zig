@@ -38,6 +38,7 @@ pub fn build(b: *std.Build) void {
         exe.addCSourceFile(.{
             .file = b.path("example.cpp"),
         });
+        exe.addIncludePath(b.path("include"));
         exe.linkLibrary(lib);
         b.installArtifact(exe);
 
