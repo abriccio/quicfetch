@@ -1,9 +1,15 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const SourceLocation = std.builtin.SourceLocation;
 const debug_build = builtin.mode == .Debug;
 
-fn logError(err: anyerror) void {
-    std.log.err("{s}\n", .{@errorName(err)});
+fn logError(err: anyerror, src: SourceLocation) void {
+    std.log.err("(quicfetch): {s} | {s} | line: {d}: {s}\n", .{
+        src.file,
+        src.fn_name,
+        src.line,
+        @errorName(err),
+    });
 }
 
 const Arena = std.heap.ArenaAllocator;
@@ -41,7 +47,7 @@ const Updater = struct {
 
     fn writeMessage(u: *Updater, comptime fmt: []const u8, args: anytype) void {
         _ = std.fmt.bufPrint(&u.msg_buf, fmt, args) catch |e| {
-            std.log.err("{!}\n", .{e});
+            logError(e, @src());
         };
     }
 
@@ -94,18 +100,18 @@ export fn updater_init(
     current_version: [*:0]const u8,
 ) ?*Updater {
     const updater = std.heap.c_allocator.create(Updater) catch |e| {
-        logError(e);
+        logError(e, @src());
         return null;
     };
     updater.* = .{
         .url = span(url),
         .arena_impl = std.heap.c_allocator.create(Arena) catch |e| {
-            logError(e);
+            logError(e, @src());
             return null;
         },
         .name = span(name),
         .version = std.SemanticVersion.parse(span(current_version)) catch |e| {
-            logError(e);
+            logError(e, @src());
             return null;
         },
     };
@@ -121,21 +127,21 @@ export fn updater_deinit(u: ?*Updater) void {
         updater.fetch_thread.join();
         updater.dl_thread.join();
         updater.arena_impl.deinit();
-    } else logError(error.UpdaterNull);
+    } else logError(error.UpdaterNull, @src());
 }
 
 export fn updater_fetch(u: ?*Updater, cb: CheckVersionCb) void {
     if (u) |updater| {
         const fetch_thread = std.Thread.spawn(
             .{},
-            fetchWrapper,
+            fetchAsyncCatchError,
             .{ updater, cb },
         ) catch |e| {
             updater.writeMessage("Error: {s}\n", .{@errorName(e)});
             return;
         };
         updater.fetch_thread = fetch_thread;
-    } else logError(error.UpdaterNull);
+    } else logError(error.UpdaterNull, @src());
 }
 
 /// Uses OS-appropriate URL
@@ -143,26 +149,26 @@ export fn updater_download_bin(u: ?*Updater, options: DownloadOptions) void {
     if (u) |updater| {
         const dl_thread = std.Thread.spawn(
             .{},
-            downloadWrapper,
+            downloadAsyncCatchError,
             .{ updater, options },
         ) catch |e| {
             updater.writeMessage("Error: {s}\n", .{@errorName(e)});
             return;
         };
         updater.dl_thread = dl_thread;
-    } else logError(error.UpdaterNull);
+    } else logError(error.UpdaterNull, @src());
 }
 
 export fn updater_get_message(u: ?*Updater) [*]const u8 {
     if (u) |updater| {
         return &updater.msg_buf;
     } else {
-        logError(error.UpdaterNull);
+        logError(error.UpdaterNull, @src());
         return "Error: Updater is null";
     }
 }
 
-fn fetchWrapper(u: *Updater, cb: CheckVersionCb) void {
+fn fetchAsyncCatchError(u: *Updater, cb: CheckVersionCb) void {
     fetchAsync(u, cb) catch |e| {
         u.writeMessage("Error: {s}\n", .{@errorName(e)});
         if (cb) |func|
@@ -212,7 +218,7 @@ fn parseToValue(allocator: std.mem.Allocator, str: []const u8) !json.Parsed(json
     return try json.parseFromSlice(json.Value, allocator, str, .{});
 }
 
-fn downloadWrapper(
+fn downloadAsyncCatchError(
     u: *Updater,
     options: DownloadOptions,
 ) void {
