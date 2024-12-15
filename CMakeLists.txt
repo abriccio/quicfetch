@@ -4,19 +4,17 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(LIB_ARTIFACT "${CMAKE_CURRENT_SOURCE_DIR}/zig-out/lib/libquicfetch.a")
 
-if(APPLE)
-    set(COMPILE_TARGET "native-apple")
-elseif(UNIX)
-    set(COMPILE_TARGET "native-linux-musl")
+if (UNIX AND NOT APPLE)
+    set(LIB_TARGET "native-linux-musl")
 else()
-    set(COMPILE_TARGET "native-windows-gnu")
+    set(LIB_TARGET "native")
 endif()
 
 add_custom_command(OUTPUT ${LIB_ARTIFACT}
     VERBATIM
-    COMMAND zig ARGS build -Doptimize=ReleaseSafe -Dtarget=${COMPILE_TARGET}
+    COMMAND zig ARGS build -Doptimize=ReleaseFast -Dtarget=${LIB_TARGET}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS quicfetch.zig
+    DEPENDS quicfetch.zig build.zig
 )
 add_custom_target(quicfetch_build DEPENDS ${LIB_ARTIFACT})
 

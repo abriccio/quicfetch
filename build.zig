@@ -18,7 +18,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .link_libc = true,
+        .pic = true,
     });
+    lib.bundle_compiler_rt = true;
     if (target.result.os.tag == .windows) {
         lib.linkSystemLibrary2("Crypt32", .{});
         lib.linkSystemLibrary2("Ws2_32", .{});
