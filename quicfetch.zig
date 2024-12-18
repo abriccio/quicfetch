@@ -4,6 +4,14 @@ const builtin = @import("builtin");
 const SourceLocation = std.builtin.SourceLocation;
 const debug_build = builtin.mode == .Debug;
 
+fn debugPrint(comptime fmt: []const u8, args: anytype, src: SourceLocation) void {
+    std.debug.print("(quicfetch): {s} {s}():{d}: " ++ fmt, .{
+        src.file,
+        src.fn_name,
+        src.line,
+    } ++ args);
+}
+
 fn logError(err: anyerror, src: SourceLocation) void {
     std.log.err("(quicfetch): {s} | {s} | line: {d}: {s}\n", .{
         src.file,
@@ -24,9 +32,9 @@ const json = std.json;
 
 const Hash = std.crypto.hash.sha2.Sha256;
 
-const CheckVersionCb = ?*const fn (*anyopaque, bool) callconv(.C) void;
-const DownloadProgressCb = ?*const fn (*anyopaque, read: usize, total: usize) callconv(.C) void;
-const DownloadFinishedCb = ?*const fn (*anyopaque, ok: bool, size: usize) callconv(.C) void;
+const CheckVersionCb = ?*const fn (*anyopaque, bool, ?*anyopaque) callconv(.C) void;
+const DownloadProgressCb = ?*const fn (*anyopaque, read: usize, total: usize, ?*anyopaque) callconv(.C) void;
+const DownloadFinishedCb = ?*const fn (*anyopaque, ok: bool, size: usize, ?*anyopaque) callconv(.C) void;
 
 const Updater = struct {
     url: []const u8,
@@ -40,6 +48,8 @@ const Updater = struct {
     app: App = undefined,
 
     msg_buf: [256]u8 = .{0} ** 256,
+
+    user_data: ?*anyopaque = null,
 
     /// Undefined until updater_fetch() is called
     fetch_thread: std.Thread = undefined,
@@ -93,7 +103,7 @@ const BinInfo = struct {
 const DownloadOptions = extern struct {
     progress: DownloadProgressCb,
     finished: DownloadFinishedCb,
-    dest_dir: ?[*:0]const u8,
+    dest_file: ?[*:0]const u8,
     chunk_size: c_int,
 };
 
@@ -101,7 +111,12 @@ export fn updater_init(
     url: [*:0]const u8,
     name: [*:0]const u8,
     current_version: [*:0]const u8,
+    user_data: ?*anyopaque,
 ) ?*Updater {
+    debugPrint("Initializing updater for plugin {s} with URL: {s}", .{
+        name,
+        url,
+    }, @src());
     const updater = std.heap.c_allocator.create(Updater) catch |e| {
         logError(e, @src());
         return null;
@@ -117,6 +132,7 @@ export fn updater_init(
             logError(e, @src());
             return null;
         },
+        .user_data = user_data,
     };
 
     updater.arena_impl.* = Arena.init(std.heap.raw_c_allocator);
@@ -175,7 +191,7 @@ fn fetchAsyncCatchError(u: *Updater, cb: CheckVersionCb) void {
     fetchAsync(u, cb) catch |e| {
         u.writeMessage("Error fetching update: {s}\n", .{@errorName(e)});
         if (cb) |func|
-            func(u, false);
+            func(u, false, u.user_data);
     };
 }
 
@@ -214,7 +230,7 @@ fn fetchAsync(u: *Updater, cb: CheckVersionCb) !void {
 
     if (needs_update) {
         u.writeMessage(
-            \\New version: {s}
+            \\Version: {s}
             \\Changes:
             \\{s}
         , .{
@@ -226,7 +242,7 @@ fn fetchAsync(u: *Updater, cb: CheckVersionCb) !void {
     }
 
     if (cb) |func| {
-        func(u, needs_update);
+        func(u, needs_update, u.user_data);
     } else return error.NoCallback;
 }
 
@@ -241,7 +257,7 @@ fn downloadAsyncCatchError(
     downloadAsync(u, options) catch |e| {
         u.writeMessage("Error downloading update: {s}\n", .{@errorName(e)});
         if (options.finished) |func| {
-            func(u, false, 0);
+            func(u, false, 0, u.user_data);
         }
     };
 }
@@ -255,10 +271,9 @@ fn downloadAsync(
     // checksum. We don't delete `url` and `checksum` during the lifetime of
     // this thread, right? So why does its memory get invalidated during this fn?...
     const url = try u.arena.dupe(u8, bin.url);
-    const filename = std.fs.path.basename(url);
     const checksum = try u.arena.dupe(u8, bin.checksum);
 
-    const dest_dir = span(options.dest_dir) orelse
+    const dest_file = span(options.dest_file) orelse
         try std.fs.cwd().realpathAlloc(u.arena, ".");
 
     var client = Client{ .allocator = u.arena };
@@ -268,6 +283,7 @@ fn downloadAsync(
 
     var server_header_buffer = [_]u8{0} ** 512;
 
+    debugPrint("Connecting to {s}\n", .{url}, @src());
     var req = try client.open(
         .GET,
         uri,
@@ -283,8 +299,6 @@ fn downloadAsync(
         std.log.err("Connection failed: {d}: {s}", .{ @intFromEnum(res.status), name });
         return error.ConnectionFailed;
     }
-    const content_type = res.content_type orelse "null";
-    std.debug.print("Content-type: {s}\n", .{content_type});
     const size = res.content_length orelse 0;
 
     const buf = try u.arena.alloc(
@@ -293,20 +307,24 @@ fn downloadAsync(
     );
     defer u.arena.free(buf);
 
+    // read bytes into memory
     var bytes_read: usize = 0;
     while (bytes_read < size) {
         bytes_read += try req.reader().readAtLeast(buf[bytes_read..], @intCast(options.chunk_size));
+        // call user progress function
         if (options.progress) |func|
-            func(u, bytes_read, size);
+            func(u, bytes_read, size, u.user_data);
     }
 
     if (bytes_read != size) {
         std.log.err("Couldn't read full buffer\n", .{});
+        u.writeMessage("Error downloading update: Couldn't read full data buffer", .{});
         if (options.finished) |func|
-            func(u, false, bytes_read);
+            func(u, false, bytes_read, u.user_data);
     }
 
-    std.debug.print("Checking hash...\n", .{});
+    // verify checksum
+    debugPrint("Checking hash...\n", .{}, @src());
     var hash: [Hash.digest_length]u8 = undefined;
     Hash.hash(buf[0..bytes_read], &hash, .{});
     if (!checkHash(u.arena, checksum, &hash)) {
@@ -314,27 +332,29 @@ fn downloadAsync(
             checksum,
         });
         if (options.finished) |func|
-            func(u, false, bytes_read);
+            func(u, false, bytes_read, u.user_data);
         return error.BadHash;
     }
     std.debug.print("Hash OK\n", .{});
 
-    var dest = std.fs.openDirAbsolute(dest_dir, .{}) catch |e| {
+    // save buffer to file
+    debugPrint("Saving file to: {s}\n", .{dest_file}, @src());
+    var file = std.fs.createFileAbsolute(dest_file, .{}) catch |e| {
         std.log.err("{!}\n", .{e});
         if (options.finished) |func|
-            func(u, false, bytes_read);
+            func(u, false, bytes_read, u.user_data);
         return e;
     };
-    defer dest.close();
-    dest.writeFile(.{ .sub_path = filename, .data = buf[0..bytes_read] }) catch |e| {
+    defer file.close();
+    file.writeAll(buf) catch |e| {
         std.log.err("{!}\n", .{e});
         if (options.finished) |func|
-            func(u, false, bytes_read);
+            func(u, false, bytes_read, u.user_data);
         return e;
     };
 
     if (options.finished) |func|
-        func(u, true, bytes_read);
+        func(u, true, bytes_read, u.user_data);
 }
 
 fn checkHash(allocator: std.mem.Allocator, expected: []const u8, hash: []const u8) bool {

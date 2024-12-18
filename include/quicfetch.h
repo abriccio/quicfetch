@@ -13,12 +13,13 @@ typedef struct Updater Updater;
 
 #define MSG_BUF_SIZE 256
 
-typedef void (*check_version_cb)(Updater *u, bool needs_update);
-typedef void (*download_progress_cb)(Updater *u, size_t read, size_t total);
-typedef void (*download_finished_cb)(Updater *u, bool ok, size_t size);
+typedef void (*check_version_cb)(Updater *u, bool needs_update, void *user_data);
+typedef void (*download_progress_cb)(Updater *u, size_t read, size_t total, void *user_data);
+typedef void (*download_finished_cb)(Updater *u, bool ok, size_t size, void *user_data);
 
 Updater *updater_init(const char *url, const char *name,
-                      const char *current_version);
+                      const char *current_version,
+                      void *user_data);
 void updater_deinit(Updater *);
 // cb -- Callback from fetch thread with version check result. Don't call any
 // library functions from it since it wants to yield right after calling.
@@ -29,7 +30,7 @@ const char *updater_get_message(Updater *);
 typedef struct DownloadOptions {
     download_progress_cb progress;
     download_finished_cb finished;
-    const char *dest_dir;
+    const char *dest_file;
     int chunk_size;
 } DownloadOptions;
 // Will automatically use the OS-appropriate download URL
