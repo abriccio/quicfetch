@@ -1,7 +1,7 @@
 name: ci
 
 env:
-  AWS_API_KEY: ${{ secrets.AWS_API_KEY }}
+  AWS_API_KEY: "${{ secrets.AWS_API_KEY }}"
 
 on:
   pull_request:
