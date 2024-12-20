@@ -27,7 +27,7 @@ echo "Zig path: ${ZIG}"
 
 echo "Adding API key"
 
-touch ._env
-echo "${{ secrets.AWS_API_KEY }}" >> ._env
+touch .secrets
+echo "${AWS_API_KEY}" >> .secrets
 
 $ZIG build run -Dbuild-example
