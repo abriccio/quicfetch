@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(lib);
 
     if (build_example) {
-        const api_key = std.posix.getenv("AWS_API_KEY") orelse return error.NoAPIKEY;
+        const api_key = try std.process.getEnvVarOwned(b.allocator, "AWS_API_KEY");
         const api_flag = try std.mem.concat(b.allocator, u8, &.{
             "-DAWS_API_KEY=",
             "\"",

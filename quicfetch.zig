@@ -397,7 +397,7 @@ const ActivationResponse = struct {
     success: bool,
     Item: struct {
         product: []const u8,
-        orderNum: []const u8,
+        orderNum: ?[]const u8,
         license: []const u8,
         activationCount: u32,
         maxActivations: u32,
