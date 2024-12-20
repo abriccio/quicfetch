@@ -54,10 +54,10 @@ const Updater = struct {
 
     user_data: ?*anyopaque = null,
 
-    /// Undefined until updater_fetch() is called
-    fetch_thread: std.Thread = undefined,
-    /// Undefined until updater_download_bin() is called
-    dl_thread: std.Thread = undefined,
+    /// null until updater_fetch() is called
+    fetch_thread: ?std.Thread = null,
+    /// null until updater_download_bin() is called
+    dl_thread: ?std.Thread = null,
 
     fn writeMessage(u: *Updater, comptime fmt: []const u8, args: anytype) void {
         @memset(&u.msg_buf, 0);
@@ -146,8 +146,10 @@ export fn updater_init(
 
 export fn updater_deinit(u: ?*Updater) void {
     if (u) |updater| {
-        updater.fetch_thread.join();
-        updater.dl_thread.join();
+        if (updater.fetch_thread) |thr|
+            thr.join();
+        if (updater.dl_thread) |thr|
+            thr.join();
         updater.arena_impl.deinit();
         std.heap.c_allocator.destroy(updater);
     } else logError(error.UpdaterNull, @src());
@@ -433,6 +435,10 @@ fn activateAsyncCatchError(info: ActivationInfo) void {
         logError(e, @src());
         const msg = ActivationInfo.writeMessage("Activation failed: {!}", .{e});
         info.on_activation(false, msg.ptr, msg.len, info.user_data);
+    };
+    std.Thread.yield() catch |e| {
+        logError(e, @src());
+        std.process.exit(1);
     };
 }
 
