@@ -1,15 +1,15 @@
 const std = @import("std");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const build_options = b.addOptions();
     const build_example = b.option(
         bool,
         "build-example",
         "Build example runner binary",
     ) orelse false;
+    const build_options = b.addOptions();
     build_options.addOption(bool, "build-example", build_example);
 
     const lib = b.addStaticLibrary(.{
@@ -21,6 +21,8 @@ pub fn build(b: *std.Build) void {
         .pic = true,
     });
     lib.bundle_compiler_rt = true;
+    lib.root_module.addOptions("build-options", build_options);
+
     if (target.result.os.tag == .windows) {
         lib.linkSystemLibrary2("Crypt32", .{});
         lib.linkSystemLibrary2("Ws2_32", .{});
@@ -29,6 +31,12 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(lib);
 
     if (build_example) {
+        const cwd = b.build_root;
+        const api_key = try cwd.handle.readFileAlloc(b.allocator, ".env", 256);
+        const api_flag = try std.mem.concat(b.allocator, u8, &.{
+            "-DAWS_API_KEY=",
+            api_key,
+        });
         const exe = b.addExecutable(.{
             .name = "main",
             .target = target,
@@ -37,6 +45,7 @@ pub fn build(b: *std.Build) void {
         });
         exe.addCSourceFile(.{
             .file = b.path("example.cpp"),
+            .flags = &.{api_flag},
         });
         exe.addIncludePath(b.path("include"));
         exe.linkLibrary(lib);

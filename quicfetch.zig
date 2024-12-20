@@ -4,16 +4,19 @@ const builtin = @import("builtin");
 const SourceLocation = std.builtin.SourceLocation;
 const debug_build = builtin.mode == .Debug;
 
-fn debugPrint(comptime fmt: []const u8, args: anytype, src: SourceLocation) void {
-    std.debug.print("(quicfetch): {s} {s}():{d}: " ++ fmt, .{
+fn debugPrint(comptime fmt: []const u8, args: anytype, comptime src: SourceLocation) void {
+    if (!debug_build) {
+        return;
+    }
+    std.debug.print("(quicfetch): {s}:fn {s}|{d}: " ++ fmt, .{
         src.file,
         src.fn_name,
         src.line,
     } ++ args);
 }
 
-fn logError(err: anyerror, src: SourceLocation) void {
-    std.log.err("(quicfetch): {s} | {s} | line: {d}: {s}\n", .{
+fn logError(err: anyerror, comptime src: SourceLocation) void {
+    std.log.err("(quicfetch): {s}:fn {s}|{d}: {s}\n", .{
         src.file,
         src.fn_name,
         src.line,
@@ -113,7 +116,7 @@ export fn updater_init(
     current_version: [*:0]const u8,
     user_data: ?*anyopaque,
 ) ?*Updater {
-    debugPrint("Initializing updater for plugin {s} with URL: {s}", .{
+    debugPrint("Initializing updater for plugin {s} with URL: {s}\n", .{
         name,
         url,
     }, @src());
@@ -146,6 +149,7 @@ export fn updater_deinit(u: ?*Updater) void {
         updater.fetch_thread.join();
         updater.dl_thread.join();
         updater.arena_impl.deinit();
+        std.heap.c_allocator.destroy(updater);
     } else logError(error.UpdaterNull, @src());
 }
 
@@ -273,8 +277,11 @@ fn downloadAsync(
     const url = try u.arena.dupe(u8, bin.url);
     const checksum = try u.arena.dupe(u8, bin.checksum);
 
-    const dest_file = span(options.dest_file) orelse
-        try std.fs.cwd().realpathAlloc(u.arena, ".");
+    const dest_file = span(options.dest_file) orelse blk: {
+        const basename = std.fs.path.basename(bin.url);
+        _ = try std.fs.cwd().createFile(basename, .{});
+        break :blk try std.fs.cwd().realpathAlloc(u.arena, basename);
+    };
 
     var client = Client{ .allocator = u.arena };
     defer client.deinit();
@@ -335,7 +342,7 @@ fn downloadAsync(
             func(u, false, bytes_read, u.user_data);
         return error.BadHash;
     }
-    std.debug.print("Hash OK\n", .{});
+    debugPrint("Hash OK\n", .{}, @src());
 
     // save buffer to file
     debugPrint("Saving file to: {s}\n", .{dest_file}, @src());
@@ -366,4 +373,109 @@ fn checkHash(allocator: std.mem.Allocator, expected: []const u8, hash: []const u
         };
     }
     return std.mem.eql(u8, expected_bytes, hash);
+}
+
+const ActivationInfo = struct {
+    url: []const u8,
+    license: []const u8,
+    api_key: []const u8,
+    on_activation: *const fn (bool, [*]const u8, usize, ?*anyopaque) callconv(.C) void,
+    user_data: ?*anyopaque,
+
+    fn writeMessage(comptime fmt: []const u8, args: anytype) [:0]const u8 {
+        var buf: [256]u8 = .{0} ** 256;
+        return std.fmt.bufPrintZ(&buf, fmt, args) catch |e| {
+            logError(e, @src());
+            return "Buffer write error";
+        };
+    }
+};
+
+const ActivationResponse = struct {
+    success: bool,
+    Item: struct {
+        product: []const u8,
+        license: []const u8,
+        activationCount: u32,
+        maxActivations: u32,
+    },
+    message: []const u8,
+};
+
+/// url must end in '/' for the request to work
+export fn activation_check(
+    url: [*:0]const u8,
+    license: [*:0]const u8,
+    api_key: [*:0]const u8,
+    cb: *const fn (bool, [*]const u8, usize, ?*anyopaque) callconv(.C) void,
+    user_data: ?*anyopaque,
+) void {
+    const activate_thread = std.Thread.spawn(
+        .{},
+        activateAsyncCatchError,
+        .{.{
+            .url = span(url),
+            .license = span(license),
+            .api_key = span(api_key),
+            .on_activation = cb,
+            .user_data = user_data,
+        }},
+    ) catch |e| {
+        logError(e, @src());
+        return;
+    };
+    activate_thread.detach();
+}
+
+fn activateAsyncCatchError(info: ActivationInfo) void {
+    activateAsync(info) catch |e| {
+        logError(e, @src());
+        const msg = ActivationInfo.writeMessage("Activation failed: {!}", .{e});
+        info.on_activation(false, msg.ptr, msg.len, info.user_data);
+    };
+}
+
+fn activateAsync(info: ActivationInfo) !void {
+    var arena_impl = std.heap.ArenaAllocator.init(std.heap.raw_c_allocator);
+    defer arena_impl.deinit();
+    const arena = arena_impl.allocator();
+
+    var client = Client{ .allocator = arena };
+    defer client.deinit();
+
+    var buf = std.ArrayList(u8).init(arena);
+    defer buf.deinit();
+
+    const res = try client.fetch(.{
+        .location = .{ .url = try mem.concat(arena, u8, &.{ info.url, info.license }) },
+        .response_storage = .{ .dynamic = &buf },
+        .extra_headers = &.{
+            .{ .name = "x-api-key", .value = info.api_key },
+        },
+    });
+
+    debugPrint("Activation response:\n{s}\n", .{buf.items}, @src());
+
+    if (res.status != .ok) {
+        logError(error.ConnectionFailed, @src());
+        const msg = ActivationInfo.writeMessage("Activation failed: {s}\n", .{@tagName(res.status)});
+        info.on_activation(false, msg.ptr, msg.len, info.user_data);
+        return;
+    }
+
+    const parsed = try parseToValue(arena, buf.items);
+    defer parsed.deinit();
+
+    const parsed_response = try json.parseFromValue(ActivationResponse, arena, parsed.value, .{});
+    defer parsed_response.deinit();
+    const response = parsed_response.value;
+
+    if (response.success) {
+        const msg = ActivationInfo.writeMessage("Activation successful\n", .{});
+        info.on_activation(true, msg.ptr, msg.len, info.user_data);
+    } else {
+        const msg = ActivationInfo.writeMessage("Activation failed: {s}\n", .{response.message});
+        info.on_activation(false, msg.ptr, msg.len, info.user_data);
+        return;
+    }
 }

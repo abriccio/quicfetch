@@ -8,6 +8,7 @@
 extern "C" {
 #endif
 
+// Updater API
 // Opaque updater state
 typedef struct Updater Updater;
 
@@ -35,6 +36,11 @@ typedef struct DownloadOptions {
 } DownloadOptions;
 // Will automatically use the OS-appropriate download URL
 void updater_download_bin(Updater *, DownloadOptions opt);
+
+// Activator API
+typedef void(*activation_cb)(bool success, const char *msg, size_t msg_len, void *user_data);
+
+void activation_check(const char *url, const char *license, const char *api_key, activation_cb cb, void *user_data);
 
 #ifdef __cplusplus
 }

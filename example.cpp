@@ -14,7 +14,7 @@
 bool evil = true;
 bool g_need_update = false;
 
-void on_check(Updater *u, bool needs_update) {
+void on_check(Updater *u, bool needs_update, void *user_data) {
     if (needs_update) {
         printf("Needs update\n");
         g_need_update = true;
@@ -23,12 +23,12 @@ void on_check(Updater *u, bool needs_update) {
     printf("%s\n", msg);
 }
 
-void download_progress(Updater *u, size_t cur, size_t size) {
+void download_progress(Updater *u, size_t cur, size_t size, void *user_data) {
     printf("Downloaded : %zukB / %zukB | %.2f%%\n", cur / 1024, size / 1024,
          (float)cur / (float)size * 100.f);
 }
 
-void download_finished(Updater *u, bool ok, size_t size) {
+void download_finished(Updater *u, bool ok, size_t size, void *user_data) {
     if (ok) {
         printf("Download finished | %zukB\n", size/1024);
     } else {
@@ -38,11 +38,19 @@ void download_finished(Updater *u, bool ok, size_t size) {
     evil = false;
 }
 
+void on_activation(bool success, const char* msg, size_t msg_len, void *user_data) {
+    puts(msg);
+    // lol why isn't printf working here?
+    // printf("%s\n", msg);
+    evil = false;
+}
+
 int main() {
     Updater *updater = updater_init(
         "https://arborealaudio.com/versions/draft/index.json",
         "OmniAmp",
-        "1.0.0"
+        "1.0.0",
+        NULL
     );
 
     updater_fetch(updater, on_check);
@@ -53,7 +61,7 @@ int main() {
             updater_download_bin(updater, (DownloadOptions){
                                      .progress = download_progress,
                                      .finished = download_finished,
-                                     .dest_dir = NULL,
+                                     .dest_file = NULL,
                                      .chunk_size = 32 * 1024,
                                  });
             g_need_update = false;
@@ -61,6 +69,15 @@ int main() {
     }
 
     updater_deinit(updater);
+
+    evil = true;
+    activation_check("https://3pvj52nx17.execute-api.us-east-1.amazonaws.com/"
+                     "default/licenses/",
+                     "OMNIAMP-TEST-LICENSE", AWS_API_KEY, on_activation, NULL);
+    while (evil) {
+        SLEEP(1000);
+    }
+
     return 0;
 }
 
