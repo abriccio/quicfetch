@@ -25,9 +25,4 @@ fi
 
 echo "Zig path: ${ZIG}"
 
-echo "Adding API key"
-
-touch .secrets
-echo "${AWS_API_KEY}" >> .secrets
-
 $ZIG build run -Dbuild-example

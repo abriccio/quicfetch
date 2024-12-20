@@ -31,8 +31,7 @@ pub fn build(b: *std.Build) !void {
     b.installArtifact(lib);
 
     if (build_example) {
-        const cwd = b.build_root;
-        const api_key = try cwd.handle.readFileAlloc(b.allocator, ".secrets", 256);
+        const api_key = std.posix.getenv("AWS_API_KEY") orelse return error.NoAPIKEY;
         const api_flag = try std.mem.concat(b.allocator, u8, &.{
             "-DAWS_API_KEY=",
             api_key,
