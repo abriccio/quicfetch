@@ -12,16 +12,20 @@ pub fn build(b: *std.Build) !void {
     const build_options = b.addOptions();
     build_options.addOption(bool, "build-example", build_example);
 
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "quicfetch",
-        .root_source_file = b.path("quicfetch.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-        .pic = true,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("quicfetch.zig"),
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .pic = true,
+            .imports = &.{
+                .{ .module = build_options.createModule(), .name = "build-options" },
+            },
+        }),
     });
     lib.bundle_compiler_rt = true;
-    lib.root_module.addOptions("build-options", build_options);
 
     if (target.result.os.tag == .windows) {
         lib.linkSystemLibrary2("Crypt32", .{});
@@ -40,9 +44,11 @@ pub fn build(b: *std.Build) !void {
         });
         const exe = b.addExecutable(.{
             .name = "main",
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+                .link_libc = true,
+            }),
         });
         exe.addCSourceFile(.{
             .file = b.path("example.cpp"),

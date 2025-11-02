@@ -23,7 +23,12 @@ jobs:
         os: [windows-latest, ubuntu-latest, macos-latest]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v5
 
-    - name: Build
-      run: bash ./ci/build.sh
+    - uses: mlugg/setup-zig@2.0.5
+
+    - name: Debug
+      run: zig build run -Dbuild-example
+
+    - name: Release
+      run: zig build run -Dbuild-example -Doptimize=ReleaseSafe

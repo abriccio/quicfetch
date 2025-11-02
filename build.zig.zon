@@ -1,0 +1,7 @@
+.{
+    .name = .quicfetch,
+    .version = "0.2.0",
+    .fingerprint = 0x31e4bc50384e4a89,
+    .minimum_zig_version = "0.15.1",
+    .paths = .{""},
+}

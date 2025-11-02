@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#ifdef WIN32
+#ifdef _WIN32
 #include <windows.h>
 #define SLEEP(ms) Sleep(ms)
 #else
@@ -39,9 +39,7 @@ void download_finished(Updater *u, bool ok, size_t size, void *user_data) {
 }
 
 void on_activation(bool success, const char* msg, size_t msg_len, void *user_data) {
-    puts(msg);
-    // lol why isn't printf working here?
-    // printf("%s\n", msg);
+    printf("%s\n", msg);
     evil = false;
 }
 
