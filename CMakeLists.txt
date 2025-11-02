@@ -12,7 +12,7 @@ endif()
 
 add_custom_command(OUTPUT ${LIB_ARTIFACT}
     VERBATIM
-    COMMAND zig ARGS build -Doptimize=ReleaseFast -Dtarget=${LIB_TARGET}
+    COMMAND zig ARGS build -Doptimize=ReleaseSafe -Dtarget=${LIB_TARGET}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS quicfetch.zig build.zig
 )

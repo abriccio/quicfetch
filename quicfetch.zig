@@ -111,6 +111,12 @@ const DownloadOptions = extern struct {
     chunk_size: c_int,
 };
 
+var debug_allocator: std.heap.DebugAllocator(.{}) = .init;
+var gpa = if (debug_build)
+    debug_allocator.allocator()
+else
+    std.heap.smp_allocator;
+
 export fn updater_init(
     url: [*:0]const u8,
     name: [*:0]const u8,
@@ -121,13 +127,13 @@ export fn updater_init(
         name,
         url,
     }, @src());
-    const updater = std.heap.c_allocator.create(Updater) catch |e| {
+    const updater = gpa.create(Updater) catch |e| {
         logError(e, @src());
         return null;
     };
     updater.* = .{
         .url = span(url),
-        .arena_impl = std.heap.c_allocator.create(Arena) catch |e| {
+        .arena_impl = gpa.create(Arena) catch |e| {
             logError(e, @src());
             return null;
         },
@@ -138,7 +144,6 @@ export fn updater_init(
         },
         .user_data = user_data,
     };
-
     updater.arena_impl.* = Arena.init(std.heap.raw_c_allocator);
     updater.arena = updater.arena_impl.allocator();
 
@@ -152,8 +157,8 @@ export fn updater_deinit(u: ?*Updater) void {
         if (updater.dl_thread) |thr|
             thr.join();
         updater.arena_impl.deinit();
-        std.heap.c_allocator.destroy(updater.arena_impl);
-        std.heap.c_allocator.destroy(updater);
+        gpa.destroy(updater.arena_impl);
+        gpa.destroy(updater);
     } else logError(error.UpdaterNull, @src());
 }
 
