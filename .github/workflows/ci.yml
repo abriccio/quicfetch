@@ -25,7 +25,7 @@ jobs:
     steps:
     - uses: actions/checkout@v5
 
-    - uses: mlugg/setup-zig@2.0.5
+    - uses: mlugg/setup-zig@v2.0.5
 
     - name: Debug
       run: zig build run -Dbuild-example
